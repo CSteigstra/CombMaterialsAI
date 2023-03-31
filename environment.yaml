@@ -39,6 +39,7 @@ dependencies:
 
   - pip>=23
   - pip:
+      - hydra-submitit-launcher
       - hydra-optuna-sweeper
       - hydra-colorlog
       - pyrootutils
