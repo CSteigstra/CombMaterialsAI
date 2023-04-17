@@ -32,10 +32,10 @@ class CAPE2d(nn.Module):
         self.register_buffer('w_x', w_x)
         self.register_buffer('w_y', w_y)
 
-        self.register_buffer('content_scale', Tensor([math.sqrt(d_model)]))
+        # self.register_buffer('content_scale', Tensor([math.sqrt(d_model)]))
 
     def forward(self, patches: Tensor) -> Tensor:
-        return (patches * self.content_scale) + self.compute_pos_emb(patches)
+        return self.compute_pos_emb(patches)
 
     def compute_pos_emb(self, patches: Tensor) -> Tensor:
         if self.batch_first:
@@ -59,7 +59,7 @@ class CAPE2d(nn.Module):
 
         return pos_emb
 
-    def augment_positions(self, x: Tensor, y: Tensor):
+    def augment_positions(self, x: Tensor, y: Tensor) -> Tensor:
         if self.training:
             batch_size, _, _ = x.shape
 
@@ -91,5 +91,24 @@ class CAPE2d(nn.Module):
 
         return x, y
 
-    def set_content_scale(self, content_scale: float):
-        self.content_scale = Tensor([content_scale])
+    # def set_content_scale(self, content_scale: float):
+    #     self.content_scale = Tensor([content_scale])
+
+
+class SinCos2d(nn.Module):
+    def __init__(self, temperature: float = 10000.):
+        super().__init__()
+        self.temperature = temperature
+
+    def forward(self, patches: Tensor) -> Tensor:
+        _, h, w, dim, device, dtype = *patches.shape, patches.device, patches.dtype
+
+        y, x = torch.meshgrid(torch.arange(h, device = device), torch.arange(w, device = device), indexing = 'ij')
+        assert (dim % 4) == 0, 'feature dimension must be multiple of 4 for sincos emb'
+        omega = torch.arange(dim // 4, device = device) / (dim // 4 - 1)
+        omega = 1. / (self.temperature ** omega)
+
+        y = y.flatten()[:, None] * omega[None, :]
+        x = x.flatten()[:, None] * omega[None, :] 
+        pe = torch.cat((x.sin(), x.cos(), y.sin(), y.cos()), dim = 1)
+        return pe.type(dtype)
