@@ -1,0 +1,29 @@
+_target_: src.models.metamaterial_module.MetaMaterialLitModule
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.001
+  weight_decay: 0.0
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.1
+  patience: 10
+
+net:
+  _target_: src.models.components.transformer.SimpleViT
+  image_size: 4
+  patch_size: 2
+  channels: 1
+  dim: 32
+  heads: 8
+  dim_head: 64
+  mlp_dim: 128
+  depth: 1
+  num_classes: 1
+  posemb:
+    _target_: src.models.components.posembed.SinCos2d
+    temperature: 10000
