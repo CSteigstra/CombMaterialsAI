@@ -7,10 +7,11 @@ from lightning import LightningDataModule
 from torch.utils.data import ConcatDataset, DataLoader, Dataset, random_split
 from torchvision.datasets.utils import _flip_byte_order, check_integrity, download_and_extract_archive, extract_archive, verify_str_arg
 import torch.utils.data as data
+from torchvision.datasets.vision import VisionDataset
 from torchvision.transforms import transforms
 import numpy as np
 
-class MetaMaterial(data.Dataset):
+class MetaMaterial(VisionDataset):
     mirrors = [
         "https://zenodo.org/record/7070963/files",
     ]
@@ -51,11 +52,12 @@ class MetaMaterial(data.Dataset):
         self,
         root: str,
         train: bool = True,
+        transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         download: bool = False,
     ) -> None:
-        super().__init__(root, transform=transform, target_transform=target_transform)
+        super().__init__(root, transforms=transforms,transform=transform, target_transform=target_transform)
         self.train = train  # training set or test set
 
         if self._check_legacy_exist():
@@ -85,7 +87,7 @@ class MetaMaterial(data.Dataset):
         data_file = self.training_file if self.train else self.test_file
         return torch.load(os.path.join(self.processed_folder, data_file))
 
-    def _load_data(self):
+    def _load_data(self) -> Tuple[torch.Tensor, torch.Tensor]:
         # TODO: Add support for sizes as arguments.
         grid_file = f"data_new_rrQR_i_n_M_3x3_fixn4.npy"
         data = torch.from_numpy(np.load(os.path.join(self.raw_folder, grid_file)).astype(int))
@@ -98,7 +100,8 @@ class MetaMaterial(data.Dataset):
         targets_ext = torch.from_numpy(np.loadtxt(os.path.join(self.raw_folder, f"{label_ext_file}.txt"), delimiter=',').astype(int))
         targets[targets_ext[:, 0]] = targets_ext
 
-        return data, targets
+        # Ignore index column 0, and reshape data to 3x3 grid.
+        return data[:, 1:3*3+1].reshape(-1, 3, 3), targets[:, 1:]
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         """
@@ -108,20 +111,21 @@ class MetaMaterial(data.Dataset):
         Returns:
             tuple: (image, target) where target is index of the target class.
         """
-        grid, target = self.data[index], int(self.targets[index])
+        grid, target = self.data[index], self.targets[index]
 
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
         # TODO: SUPPORT FOR GRIDS :)
-        img = Image.fromarray(img.numpy(), mode="L")
 
-        if self.transform is not None:
-            img = self.transform(img)
+        grid, target = self.transforms(grid, target)
 
-        if self.target_transform is not None:
-            target = self.target_transform(target)
+        # if self.transform is not None:
+        #     grid = self.transform(grid)
 
-        return img, target
+        # if self.target_transform is not None:
+        #     target = self.target_transform(target)
+
+        return grid, target
 
     def __len__(self) -> int:
         return len(self.data)

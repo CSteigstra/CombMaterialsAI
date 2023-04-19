@@ -7,10 +7,10 @@ class ScaleTransform:
     def __init__(self, n_scales=6):
         self.scales = torch.arange(1, n_scales + 1)
 
-    def __call__(self, x):
+    def __call__(self, x, y):
         """Returns a dictionary containing sub-batches of x on each scale."""
         batch_size = x.shape[0]
-
+        # TODO: Shuffle and scale y accordingly.
         # Shuffle scales.
         r_scales = self.scales[torch.randperm(len(self.scales))]
 
