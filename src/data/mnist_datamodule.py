@@ -51,14 +51,15 @@ class MetaMaterial(VisionDataset):
     def __init__(
         self,
         root: str,
-        train: bool = True,
+        sz: int,
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         download: bool = False,
     ) -> None:
-        super().__init__(root, transforms=transforms,transform=transform, target_transform=target_transform)
-        self.train = train  # training set or test set
+        super().__init__(root, transforms=transforms, transform=transform, target_transform=target_transform)
+        self.sz = sz  # sz of the grid
+        # self.n_scales = n_scales  # number of scales
 
         if self._check_legacy_exist():
             self.data, self.targets = self._load_legacy_data()
@@ -88,20 +89,20 @@ class MetaMaterial(VisionDataset):
         return torch.load(os.path.join(self.processed_folder, data_file))
 
     def _load_data(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        # TODO: Add support for sizes as arguments.
-        grid_file = f"data_new_rrQR_i_n_M_3x3_fixn4.npy"
+        # Load grid data
+        grid_file = f"data_new_rrQR_i_n_M_{self.sz}x{self.sz}_fixn4.npy"
         data = torch.from_numpy(np.load(os.path.join(self.raw_folder, grid_file)).astype(int))
 
         # Load classification results, class I or C.
-        label_file = f"results_analysis_new_rrQR_i_Scen_slope_offset_M1k_3x3_fixn4"
+        label_file = f"results_analysis_new_rrQR_i_Scen_slope_offset_M1k_{self.sz}x{self.sz}_fixn4"
         targets = torch.from_numpy(np.loadtxt(os.path.join(self.raw_folder, f"{label_file}.txt"), delimiter=',').astype(int))
         # Combine with extended experiments.
         label_ext_file = f"{label_file}_classX_extend"
         targets_ext = torch.from_numpy(np.loadtxt(os.path.join(self.raw_folder, f"{label_ext_file}.txt"), delimiter=',').astype(int))
         targets[targets_ext[:, 0]] = targets_ext
 
-        # Ignore index column 0, and reshape data to 3x3 grid.
-        return data[:, 1:3*3+1].reshape(-1, 3, 3), targets[:, 1:]
+        # Ignore index column 0, and reshape data to nxn grid.
+        return data[:, 1:self.sz**2+1].reshape(-1, self.sz, self.sz), targets[:, 1:]
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         """
@@ -115,9 +116,7 @@ class MetaMaterial(VisionDataset):
 
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
-        # TODO: SUPPORT FOR GRIDS :)
-
-        grid, target = self.transforms(grid, target)
+        grid, target, pad_mask = self.transforms(grid, target)
 
         # if self.transform is not None:
         #     grid = self.transform(grid)
@@ -125,7 +124,7 @@ class MetaMaterial(VisionDataset):
         # if self.target_transform is not None:
         #     target = self.target_transform(target)
 
-        return grid, target
+        return grid, target, pad_mask
 
     def __len__(self) -> int:
         return len(self.data)
@@ -206,11 +205,15 @@ class MetaMaterialDataModule(LightningDataModule):
     def __init__(
         self,
         data_dir: str = "data/",
-        train_val_test_split: Tuple[int, int, int] = (55_000, 5_000, 10_000),
+        train_val_split: Tuple[float, float] = (.80, .20),
+        train_sz: int = 3,
+        test_sz: int = 5,
         batch_size: int = 64,
         num_workers: int = 0,
         pin_memory: bool = False,
-        transform: Optional[transforms.Compose] = None,
+        train_transform: Optional[transforms.Compose] = None,
+        test_transform: Optional[transforms.Compose] = None,
+
     ):
         super().__init__()
 
@@ -219,7 +222,9 @@ class MetaMaterialDataModule(LightningDataModule):
         self.save_hyperparameters(logger=False)
 
         # data transformations
-        self.transforms = transform
+        self.train_transforms = train_transform
+        self.test_transforms = test_transform
+
 
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
@@ -234,8 +239,9 @@ class MetaMaterialDataModule(LightningDataModule):
 
         Do not use it to assign state (self.x = y).
         """
-        MNIST(self.hparams.data_dir, train=True, download=True)
-        MNIST(self.hparams.data_dir, train=False, download=True)
+        MetaMaterial(self.hparams.data_dir, self.hparams.train_sz, download=True)
+        MetaMaterial(self.hparams.data_dir, self.hparams.test_sz, download=True)
+
 
     def setup(self, stage: Optional[str] = None):
         """Load data. Set variables: `self.data_train`, `self.data_val`, `self.data_test`.
@@ -245,14 +251,31 @@ class MetaMaterialDataModule(LightningDataModule):
         """
         # load and split datasets only if not loaded already
         if not self.data_train and not self.data_val and not self.data_test:
-            trainset = MNIST(self.hparams.data_dir, train=True, transform=self.transforms)
-            testset = MNIST(self.hparams.data_dir, train=False, transform=self.transforms)
-            dataset = ConcatDataset(datasets=[trainset, testset])
-            self.data_train, self.data_val, self.data_test = random_split(
-                dataset=dataset,
-                lengths=self.hparams.train_val_test_split,
+            trainset = MetaMaterial(self.hparams.data_dir, sz=self.hparams.train_sz, transform=self.train_transforms)
+            self.data_train, self.data_val = random_split(
+                dataset=trainset,
+                lengths=self.hparams.train_val_split,
                 generator=torch.Generator().manual_seed(42),
             )
+
+            self.data_test = MetaMaterial(self.hparams.data_dir, sz=self.hparams.test_sz, transform=self.test_transforms)
+
+    # def _collate_fn(self, batch):
+    #     """Convert a list of grids to a batch of single sized grids.
+
+    #     Args:
+    #         batch: list of samples
+
+    #     Returns:
+    #         batch: tensor of samples
+    #     """
+    #     batch_size = self.hparams.batch_size
+    #     max_size = max([grid.shape[1] for grid, _ in batch])
+    #     batch = torch.zeros(batch_size, 1, max_size, max_size)
+    #     for i, (grid, _) in enumerate(batch):
+    #         batch[i, :, : grid.shape[1], : grid.shape[2]] = grid
+    #     return batch
+        
 
     def train_dataloader(self):
         return DataLoader(
@@ -295,4 +318,4 @@ class MetaMaterialDataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    _ = MNISTDataModule()
+    _ = MetaMaterialDataModule()

@@ -6,6 +6,9 @@ import torch
 from torch import nn
 from torch import Tensor
 
+# class SimpleViT2(nn.Module):
+    
+
 
 # helpers
 
@@ -39,13 +42,19 @@ class Attention(nn.Module):
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias = False)
         self.to_out = nn.Linear(inner_dim, dim, bias = False)
 
-    def forward(self, x):
+    def forward(self, x, key_padding_mask = None):
         x = self.norm(x)
 
         qkv = self.to_qkv(x).chunk(3, dim = -1)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv)
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+
+        if key_padding_mask is not None:
+            dots = dots.masked_fill(
+                key_padding_mask.unsqueeze(1).unsqueeze(2),
+                float('-inf'),
+            )
 
         attn = self.attend(dots)
 
@@ -62,9 +71,9 @@ class Transformer(nn.Module):
                 Attention(dim, heads = heads, dim_head = dim_head),
                 FeedForward(dim, mlp_dim)
             ]))
-    def forward(self, x):
+    def forward(self, x, key_padding_mask = None):
         for attn, ff in self.layers:
-            x = attn(x) + x
+            x = attn(x, key_padding_mask = key_padding_mask) + x
             x = ff(x) + x
         return x
 
@@ -111,14 +120,16 @@ class SimpleViT(nn.Module):
             nn.Linear(dim, num_classes)
         )
 
-    def forward(self, img):
+    def forward(self, img, key_padding_mask = None):
         *_, h, w, dtype = *img.shape, img.dtype
 
         x = self.to_patch_embedding(img)
         pe = self.posemb(x)
         x = rearrange(x, 'b ... d -> b (...) d') + pe
+        if key_padding_mask is not None:
+            key_padding_mask = rearrange(key_padding_mask, 'b ... -> b (...)')
 
-        x = self.transformer(x)
+        x = self.transformer(x, key_padding_mask = key_padding_mask)
         x = x.mean(dim = 1)
 
         x = self.to_latent(x)

@@ -1,11 +1,21 @@
 _target_: src.data.metamaterial_datamodule.MetamaterialDataModule
 data_dir: ${paths.data_dir}
 batch_size: 128
-train_val_test_split: [.55, .05, .10]
+train_val_split: [.80, .20]
 num_workers: 0
 pin_memory: True
-transform:
+train_transform:
+  _target_: torch.transforms.Compose
+  _args_:
+  - _target_: src.data.components.transform.ScaleTransform
+    n_min: 1
+    n_max: 3
+  - _target_: src.data.components.transform.RollTransform
+    cell_h: 2
+    cell_w: 2
+test_transform:
   _target_: torch.transforms.Compose
   _args_:
     _target_: src.data.components.transform.ScaleTransform
-    n_scale: 6
+    n_min: 2
+    n_max: 2
