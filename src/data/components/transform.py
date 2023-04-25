@@ -6,12 +6,14 @@ class RollTransform:
         self.cell_h = cell_h
         self.cell_w = cell_w
     
-    def __call__(self, x, y):
+    def __call__(self, x, y, mask=None):
         """Roll the input grid x by a random number of cells."""
         h, w = x.shape
-        rh, rw = torch.randint(0, h, (1, )), torch.randint(0, w, (1, ))
-        x = torch.roll(x, (rh * self.cell_h, rw * self.cell_w), dims=(0, 1))
-        return x, y   
+        rh, rw = torch.randint(0, h, (1, )) * self.cell_h, torch.randint(0, w, (1, )) * self.cell_w
+        x = torch.roll(x, (rh, rw), dims=(0, 1))
+        if mask is not None:
+            mask = torch.roll(x, (rh, rw), dims=(0, 1))
+        return x, y, mask 
 
 class ScaleTransform:
     """Repeat the input image by a random scale between n_min and n_max."""
