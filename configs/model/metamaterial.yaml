@@ -23,7 +23,6 @@ net:
   dim_head: 64
   mlp_dim: 128
   depth: 1
-  num_classes: 1
   posemb:
     _target_: src.models.components.posembed.SinCos2d
     temperature: 10000

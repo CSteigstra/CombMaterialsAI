@@ -101,8 +101,8 @@ class MetaMaterial(VisionDataset):
         targets_ext = torch.from_numpy(np.loadtxt(os.path.join(self.raw_folder, f"{label_ext_file}.txt"), delimiter=',').astype(int))
         targets[targets_ext[:, 0]] = targets_ext
 
-        # Ignore index column 0, and reshape data to nxn grid.
-        return data[:, 1:self.sz**2+1].reshape(-1, self.sz, self.sz), targets[:, 1:]
+        # Ignore index column 0, and reshape data to nxn grid, and grab class from targets.
+        return data[:, 1:self.sz**2+1].reshape(-1, self.sz, self.sz), targets[:, 1]
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         """
@@ -172,8 +172,7 @@ class MetaMaterial(VisionDataset):
                 raise RuntimeError(f"Error downloading {filename}")
 
     def extra_repr(self) -> str:
-        split = "Train" if self.train is True else "Test"
-        return f"Split: {split}"
+        return f"Split: {self.sz}"
 
 class MetaMaterialDataModule(LightningDataModule):
     """Example of LightningDataModule for MNIST dataset.
@@ -213,7 +212,6 @@ class MetaMaterialDataModule(LightningDataModule):
         pin_memory: bool = False,
         train_transform: Optional[transforms.Compose] = None,
         test_transform: Optional[transforms.Compose] = None,
-
     ):
         super().__init__()
 
@@ -232,7 +230,7 @@ class MetaMaterialDataModule(LightningDataModule):
 
     @property
     def num_classes(self):
-        return 10
+        return 1
 
     def prepare_data(self):
         """Download data if needed.

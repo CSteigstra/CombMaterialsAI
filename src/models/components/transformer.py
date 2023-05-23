@@ -81,6 +81,7 @@ class Transformer(nn.Module):
 class SimpleViT(nn.Module):
     def __init__(self, *,
                  image_size: int,
+                 posemb: nn.Module,
                  patch_size: int = 2,
                  num_classes: int = 1,
                  dim: int = 32,
@@ -89,7 +90,7 @@ class SimpleViT(nn.Module):
                  mlp_dim: int = 128,
                  channels: int = 1,
                  dim_head: int = 64,
-                 posemb: nn.Module):
+                 ):
         super().__init__()
         image_height, image_width = pair(image_size)
         patch_height, patch_width = pair(patch_size)

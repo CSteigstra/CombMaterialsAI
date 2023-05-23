@@ -1,4 +1,4 @@
-_target_: torch.transforms.Compose
+_target_: torchvision.transforms.Compose
 _args_:
   - _target_: src.data.components.transform.ScaleTransform
     n_scales: 6
